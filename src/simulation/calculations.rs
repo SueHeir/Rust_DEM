@@ -48,23 +48,24 @@ pub fn calc_kinetic_tensor(
 }
 
 pub fn calc_collision_tensor(
-    f_data: &sphere::ForceData,
+    f_data: &sphere::ContactData,
     d_data: &domain::DomainData,
     collision_tensor: Matrix3<f64>,
     average_reset_count: i32,
 ) -> Matrix3<f64> {
     let mut temp_collision_tensor = Matrix3::zeros();
 
-    for i in 0..f_data.forcedata.len() {
-        temp_collision_tensor += f_data.forcedata[i];
-    }
-    temp_collision_tensor = temp_collision_tensor.scale(1.0 / d_data.domain_volume);
+    // for i in 0..f_data.forcedata.len() {
+    //     temp_collision_tensor += f_data.forcedata[i];
+    // }
+    // temp_collision_tensor = temp_collision_tensor.scale(1.0 / d_data.domain_volume);
 
-    // average this frames kinetic tensor with prevous tensors
-    let ct: Matrix3<f64> = (collision_tensor.scale(average_reset_count as f64)
-        + temp_collision_tensor)
-        .scale(1.0 / (average_reset_count + 1) as f64) as Matrix3<f64>;
-    // println!("{:?}", kt);
+    // // average this frames kinetic tensor with prevous tensors
+    // let ct: Matrix3<f64> = (collision_tensor.scale(average_reset_count as f64)
+    //     + temp_collision_tensor)
+    //     .scale(1.0 / (average_reset_count + 1) as f64) as Matrix3<f64>;
+    // // println!("{:?}", kt);
 
-    return ct;
+    // return ct;
+    return temp_collision_tensor;
 }

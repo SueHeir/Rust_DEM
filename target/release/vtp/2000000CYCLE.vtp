@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VTKFile type="PolyData" version="0.1" byte_order="LittleEndian">
+<PolyData>
+<Piece NumberOfPoints="2">
+<Points><DataArray type="Float32" NumberOfComponents="3" format="ascii">0.0005419614631718023 0.001204156214010275 0.001
+0.0014580385367861817 0.0007458437858149202 0.001
+</DataArray>
+</Points>
+<PointData Scalars="" Vectors="">
+<DataArray type="Float32" Name="Radius" format="ascii">
+0.0001
+0.0001
+</DataArray></PointData>
+</Piece>
+</PolyData>
+</VTKFile>

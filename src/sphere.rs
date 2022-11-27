@@ -1,4 +1,4 @@
-use nalgebra::{Matrix3, Vector2, Vector3};
+use nalgebra::{Matrix3, Vector2, Vector3, Vector4};
 use std::collections::HashMap;
 
 macro_rules! pub_struct {
@@ -30,12 +30,17 @@ pub_struct!( ParticleData {
     max_radius: f64,
     mass: Vec<f64>,
     youngs_mod: Vec<f64>,
+    shear_mod: Vec<f64>,
     poisson_ratio: Vec<f64>,
     density: Vec<f64>,
     position: Vec<Vector3<f64>>,
     velocity: Vec<Vector3<f64>>,
     force: Vec<Vector3<f64>>,
 
+    moment_of_inertia: Vec<f64>,
+    quaternion: Vec<Vector4<f64>>,
+    omega: Vec<Vector3<f64>>,
+    torque: Vec<Vector3<f64>>,
 
 
 
@@ -55,9 +60,29 @@ pub_struct!( ParticleData {
 
 });
 
-pub_struct!( ForceData {
+pub_struct!( ContactData {
     particle_indexes: Vec<Vector2<usize>>,
-    force: Vec<Vector3<f64>>,
-    del: Vec<Vector3<f64>>,
-    forcedata:  Vec<Matrix3<f64>>,
+    contact_struct: Vec<ContactStruct>,
+
+
 });
+
+pub_struct!( ContactStruct {
+    force_magnitude: Vector2<f64>,
+    previous_force_magnitude: Vector2<f64>,
+    previous_force: Vector2<Vector3<f64>>,
+    force: Vector2<Vector3<f64>>,
+    tangential_force: Vector2<Vector3<f64>>,
+    previous_tangential_force: Vector2<Vector3<f64>>,
+    tangential_force_magnitude: Vector2<f64>,
+    previous_tangential_force_magnitude: Vector2<f64>,
+    sd: f64,
+    sum_normal_force: f64,
+    change_tang_direction: f64,
+    tangential_displacement: Vector3<f64>,
+    contact_vector: Vector2<Vector3<f64>>,
+    contact_radius: f64,
+    t_star: f64,
+    t_double_star: f64,
+    k_loading: i32, }
+);

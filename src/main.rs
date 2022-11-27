@@ -1,5 +1,5 @@
 mod simulation;
-use nalgebra::Vector3;
+use nalgebra::{Vector3, Vector4};
 
 use ex::fs::File;
 use rand::prelude::*;
@@ -52,18 +52,23 @@ fn main() {
         radius: Vec::<f64>::new(),
         mass: Vec::<f64>::new(),
         youngs_mod: Vec::<f64>::new(),
+        shear_mod: Vec::<f64>::new(),
         poisson_ratio: Vec::<f64>::new(),
         density: Vec::<f64>::new(),
         position: Vec::<Vector3<f64>>::new(),
         velocity: Vec::<Vector3<f64>>::new(),
         force: Vec::<Vector3<f64>>::new(),
+        moment_of_inertia: Vec::<f64>::new(),
+        quaternion: Vec::<Vector4<f64>>::new(),
+        omega: Vec::<Vector3<f64>>::new(),
+        torque: Vec::<Vector3<f64>>::new(),
         is_collision: Vec::<bool>::new(),
         materials: Vec::<sphere::Material>::new(),
         sphere_material: Vec::<usize>::new(),
         sphere_material_map: HashMap::new(),
         restitution_coefficient: 0.95,
         beta: 0.0,
-        friction: 0.1,
+        friction: 0.35,
         volume_fraction: 0.0,
     };
     let mut d_data = domain::DomainData {
@@ -193,8 +198,15 @@ fn main() {
                             p_data.radius.push(material.radius);
 
                             p_data.mass.push(material.mass);
+                            p_data
+                                .moment_of_inertia
+                                .push(2.0 / 5.0 * material.mass * material.radius.powi(2));
+
                             p_data.density.push(material.density);
                             p_data.youngs_mod.push(material.youngs_mod);
+                            p_data
+                                .shear_mod
+                                .push(material.youngs_mod / (2.0 * (1.0 + material.poisson_ratio)));
                             p_data.poisson_ratio.push(material.poisson_ratio);
 
                             let x: f64 = rng.gen::<f64>();
@@ -211,11 +223,15 @@ fn main() {
                                 d_data.domain.z * z,
                             ));
                             p_data.velocity.push(Vector3::new(
-                                vx * 0.1 - 0.05,
-                                vy * 0.1 - 0.05,
-                                vz * 0.1 - 0.05,
+                                vx * 0.5 - 0.25,
+                                vy * 0.5 - 0.25,
+                                vz * 0.5 - 0.25,
                             ));
                             p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
+
+                            p_data.quaternion.push(Vector4::new(0.0, 0.0, 0.0, 0.0));
+                            p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
+                            p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
 
                             p_data.is_collision.push(false);
                         }
@@ -239,8 +255,14 @@ fn main() {
                         p_data.radius.push(material.radius);
 
                         p_data.mass.push(material.mass);
+                        p_data
+                            .moment_of_inertia
+                            .push(2.0 / 5.0 * material.mass * material.radius.powi(2));
                         p_data.density.push(material.density);
                         p_data.youngs_mod.push(material.youngs_mod);
+                        p_data
+                            .shear_mod
+                            .push(material.youngs_mod / (2.0 * (1.0 + material.poisson_ratio)));
                         p_data.poisson_ratio.push(material.poisson_ratio);
 
                         p_data.position.push(Vector3::new(
@@ -248,8 +270,12 @@ fn main() {
                             d_data.domain.y * 0.5,
                             d_data.domain.z * 0.5,
                         ));
-                        p_data.velocity.push(Vector3::new(1.0, 0.0, 0.0));
+                        p_data.velocity.push(Vector3::new(0.05, 0.0, 0.0));
                         p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
+
+                        p_data.quaternion.push(Vector4::new(0.0, 0.0, 0.0, 0.0));
+                        p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
+                        p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
 
                         p_data.is_collision.push(false);
 
@@ -258,21 +284,33 @@ fn main() {
                         p_data.radius.push(material.radius);
 
                         p_data.mass.push(material.mass);
+                        p_data
+                            .moment_of_inertia
+                            .push(2.0 / 5.0 * material.mass * material.radius.powi(2));
                         p_data.density.push(material.density);
                         p_data.youngs_mod.push(material.youngs_mod);
+                        p_data
+                            .shear_mod
+                            .push(material.youngs_mod / (2.0 * (1.0 + material.poisson_ratio)));
                         p_data.poisson_ratio.push(material.poisson_ratio);
 
                         p_data.position.push(Vector3::new(
                             d_data.domain.x * 0.6,
-                            d_data.domain.y * 0.5,
+                            d_data.domain.y * 0.5 - 0.5e-4,
                             d_data.domain.z * 0.5,
                         ));
-                        p_data.velocity.push(Vector3::new(-1.0, 0.0, 0.0));
+                        p_data.velocity.push(Vector3::new(-0.05, 0.0, 0.0));
                         p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
+
+                        p_data.quaternion.push(Vector4::new(0.0, 0.0, 0.0, 0.0));
+                        p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
+                        p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
 
                         p_data.is_collision.push(false);
                     }
                 }
+
+                println!("Generating {} located spheres", p_data.radius.len());
             }
             "REL" => {
                 println!("{}", line);

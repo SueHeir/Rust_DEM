@@ -1,0 +1,2 @@
+cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/elizabethsuehr/Documents/GitHub/Rust_DEM/target/release/build/typenum-f89f29891e9b4fb9/out/consts.rs
+cargo:rustc-env=TYPENUM_BUILD_OP=/Users/elizabethsuehr/Documents/GitHub/Rust_DEM/target/release/build/typenum-f89f29891e9b4fb9/out/op.rs

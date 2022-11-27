@@ -4,6 +4,7 @@ mod print;
 use core::f64::consts::PI;
 
 use nalgebra::{Matrix3, Vector3};
+use rand::Rng;
 
 use crate::domain;
 use crate::sphere;
@@ -95,15 +96,16 @@ fn relax(d_data: &mut domain::DomainData, p_data: &mut sphere::ParticleData) {
 
     //Set lees Edwards boundary condition velocity here, Also calculate volume fraction
     let mut volume = 0.0;
+    let mut rng = rand::thread_rng();
     for i in 0..p_data.radius.len() {
         volume += 4.0 / 3.0 * PI * p_data.radius[i].powi(3);
 
         let x_velocity: f64 =
             (p_data.position[i][1] - d_data.domain[1] * 0.5) * d_data.lees_edwards_boundary;
 
-        // let y: f64 = rng.gen();
-        // let z: f64 = rng.gen();
-        p_data.velocity[i] = Vector3::new(x_velocity, 0.0, 0.0);
+        let y: f64 = rng.gen::<f64>();
+        let z: f64 = rng.gen::<f64>();
+        p_data.velocity[i] = Vector3::new(x_velocity, 0.5 * y - 0.25, 0.5 * z - 0.25);
 
         //p_data.velocity[i] = Eigen::Vector3d((randf()-0.5)*d_data.lees_edwards_boundary*d_data.domain(0),(randf()-0.5)*d_data.lees_edwards_boundary*d_data.domain(0),(randf()-0.5)*d_data.lees_edwards_boundary*d_data.domain(0));
     }
@@ -125,11 +127,9 @@ fn cycle(
 ) {
     let dt = calculate_delta_time(p_data);
 
-    let mut f_data = sphere::ForceData {
+    let mut c_data = sphere::ContactData {
         particle_indexes: Vec::new(),
-        force: Vec::new(),
-        del: Vec::new(),
-        forcedata: Vec::new(),
+        contact_struct: Vec::new(),
     };
 
     let mut kinetic_tensor = Matrix3::zeros();
@@ -145,42 +145,50 @@ fn cycle(
         grid::inital_integrate(p_data, dt);
 
         //Boundary Conditions
-        grid::lees_edwards_boundaries(d_data, p_data, dt, ledisplace);
+        // grid::lees_edwards_boundaries(d_data, p_data, dt, ledisplace);
+        grid::relax_boundaries_box(d_data, p_data);
 
         //Resets if a particle is in collision, and resets forces to zero
         for i in 0..p_data.radius.len() {
             p_data.is_collision[i] = false;
             p_data.force[i] = Vector3::new(0.0, 0.0, 0.0);
+            p_data.torque[i] = Vector3::new(0.0, 0.0, 0.0);
         }
 
-        f_data.forcedata.clear();
-
-        grid::update(d_data, p_data);
-        grid::collisions(d_data, p_data, &mut f_data, dt, ledisplace);
+        // Normal Box partition Collision Detection
+        // grid::update(d_data, p_data);
+        // grid::collisions(d_data, p_data, &mut f_data, dt, ledisplace);
+        // Brute Force Collision Detection, this Updates the forces on each particle
+        grid::simp_collisions(d_data, p_data, &mut c_data, dt, ledisplace);
 
         grid::final_integrate(p_data, dt);
-        //Brute Force Collision Detection, this Updates the forces on each particle
-        // grid::_simp_collisions(d_data, p_data, &mut f_data, dt, ledisplace);
 
         //calculates the kinetic stress tensor
         kinetic_tensor =
             calculations::calc_kinetic_tensor(p_data, d_data, kinetic_tensor, average_reset_count);
         collision_tensor = calculations::calc_collision_tensor(
-            &f_data,
+            &c_data,
             d_data,
             collision_tensor,
             average_reset_count,
         );
         average_reset_count += 1;
 
-        //Print statments to terminal and prints the VTP, and Stress data to fikkk,k,mles
+        //Print statments to terminal and prints the VTP, and Stress data to
         if cycle_count % update_rate == 0 {
             // println!("CYC {} completed", cycle_count);
             // println!("{}", p_data.velocity[0][0]);
-            println!("{:?}", (kinetic_tensor + collision_tensor));
+            // println!("{:?}", (kinetic_tensor + collision_tensor));
 
             print::print_vtp(p_data, cycle_count);
         }
+
+        // println!("{}", p_data.omega[0]);
+        // println!("{}", p_data.omega[1]);
+        // if c_data.particle_indexes.len() != 0 {
+        //     // println!("{}", c_data.particle_indexes.len());
+        //     println!("{}", c_data.contact_struct[0].k_loading);
+        // }
 
         //Resets the averaging of the kinetic tensor
         if cycle_count % clear_rate == 0 {
@@ -189,11 +197,24 @@ fn cycle(
             kinetic_tensor = Matrix3::zeros();
             collision_tensor = Matrix3::zeros();
             average_reset_count = 0;
+
+            // println!("{}", calculate_total_energy(p_data));
         }
 
         ledisplace += dt * d_data.lees_edwards_boundary * d_data.domain[1];
         ledisplace -= (ledisplace / d_data.domain[0]).floor() * d_data.domain[0];
     }
+}
+
+fn calculate_total_energy(p_data: &sphere::ParticleData) -> f64 {
+    //Checks each particles Size for the smallest delta time the simulation should use
+    let mut energy: f64 = 0.0;
+    for i in 0..p_data.radius.len() {
+        energy += 1.0 / 2.0 * p_data.mass[i] * p_data.velocity[i].dot(&p_data.velocity[i])
+            + 1.0 / 2.0 * p_data.moment_of_inertia[i] * p_data.omega[i].dot(&p_data.omega[i]);
+    }
+
+    return energy;
 }
 
 fn calculate_delta_time(p_data: &sphere::ParticleData) -> f64 {
@@ -206,7 +227,7 @@ fn calculate_delta_time(p_data: &sphere::ParticleData) -> f64 {
         dt = delta.min(dt);
     }
 
-    println!("Useing {} for delta time", dt * 0.5);
+    println!("Useing {} for delta time", dt * 0.05);
     //Fractional Factor set to 0.5 here,
-    return dt * 0.5;
+    return dt * 0.05;
 }
