@@ -1,6 +1,6 @@
 DEM Code in Rust
 
-Hertz contact model for single spheres, no friction
+Hertz contact model for multi-spheres, no friction
 
 Boundary conditions are period in x and z, and a Lees-Edwards boundary condition in y
 
