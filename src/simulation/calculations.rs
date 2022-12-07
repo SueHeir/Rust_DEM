@@ -1,26 +1,25 @@
+use crate::{domain, rigid_body};
 use nalgebra::{Matrix3, Vector3};
 
-use crate::{domain, sphere};
-
-pub fn _get_kinetic_energy(p_data: &mut sphere::ParticleData) -> f64 {
-    let mut sum = 0.0;
-    // Energy is defined as 1/2 m * velocity dot velocity
-    for i in 0..p_data.radius.len() {
-        sum += 1.0 / 2.0 * p_data.mass[i] * p_data.velocity[i].dot(&p_data.velocity[i]);
-    }
-    return sum;
-}
+// pub fn _get_kinetic_energy(p_data: &mut rigid_body::RigidBodiesData) -> f64 {
+//     let mut sum = 0.0;
+//     // Energy is defined as 1/2 m * velocity dot velocity
+//     for i in 0..p_data.radius.len() {
+//         sum += 1.0 / 2.0 * p_data.mass[i] * p_data.velocity[i].dot(&p_data.velocity[i]);
+//     }
+//     return sum;
+// }
 
 pub fn calc_kinetic_tensor(
-    p_data: &sphere::ParticleData,
+    p_data: &rigid_body::RigidBodiesData,
     d_data: &domain::DomainData,
     kinetic_tensor: Matrix3<f64>,
     average_reset_count: i32,
 ) -> Matrix3<f64> {
-    let n_particles = p_data.radius.len();
+    let n_particles = p_data.body_data.len();
     // Get average velocity
     let mut average_velocity = Vector3::new(0.0, 0.0, 0.0);
-    for i in 0..p_data.radius.len() {
+    for i in 0..p_data.body_data.len() {
         average_velocity += p_data.velocity[i];
     }
     average_velocity = average_velocity.scale(1.0 / n_particles as f64);
@@ -30,8 +29,8 @@ pub fn calc_kinetic_tensor(
     // Get average kinetic tensor
     let mut temp_kinetic_tensor = Matrix3::zeros();
 
-    for i in 0..p_data.radius.len() {
-        temp_kinetic_tensor += p_data.mass[i]
+    for i in 0..p_data.body_data.len() {
+        temp_kinetic_tensor += p_data.body_data[i].mass
             * ((p_data.velocity[i] - average_velocity)
                 * (p_data.velocity[i] - average_velocity).transpose());
     }
@@ -48,7 +47,7 @@ pub fn calc_kinetic_tensor(
 }
 
 pub fn calc_collision_tensor(
-    f_data: &sphere::ForceData,
+    f_data: &rigid_body::ForceData,
     d_data: &domain::DomainData,
     collision_tensor: Matrix3<f64>,
     average_reset_count: i32,

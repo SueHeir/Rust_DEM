@@ -2,8 +2,8 @@ use nalgebra::Vector3;
 
 pub struct Box {
     pub position: Vector3<i32>,
-    pub real: Vec<i32>,
-    pub ghost: Vec<i32>,
+    pub real: Vec<(i32, i32)>,
+    pub ghost: Vec<(i32, i32)>,
     pub lo: Vector3<f64>,
     pub hi: Vector3<f64>,
 }
