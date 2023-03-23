@@ -1,2 +1,0 @@
-cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/elizabethsuehr/Documents/GitHub/Rust_DEM_BondedSpheres/target/release/build/typenum-5acb6273e5ee52f4/out/consts.rs
-cargo:rustc-env=TYPENUM_BUILD_OP=/Users/elizabethsuehr/Documents/GitHub/Rust_DEM_BondedSpheres/target/release/build/typenum-5acb6273e5ee52f4/out/op.rs
