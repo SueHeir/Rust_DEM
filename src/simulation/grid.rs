@@ -115,10 +115,9 @@ pub fn simp_wall(p_data: &mut sphere::ParticleData, _dt: f64) {
             let f_dot = normalized_delta.dot(&delta_veloctiy);
             let v_r_n = f_dot * normalized_delta;
 
-            let dissipation_force = 2.0
-                * 0.91287092917
+            let dissipation_force = (5.0 as f64 / 6.0 as f64).sqrt()
                 * p_data.beta
-                * (contact_stiffness * reduced_mass).sqrt()
+                * (2.0 * contact_stiffness * reduced_mass).sqrt()
                 * v_r_n.norm()
                 * v_r_n.dot(&normalized_delta).signum();
 
@@ -313,6 +312,8 @@ pub fn simp_bonds(
                 p_data.force[*i] += fbnd_norm * n12;
                 p_data.force[*j] -= fbnd_norm * n12;
             }
+
+            continue;
         }
 
         let ftot_tan = ftan + fdamp_t;

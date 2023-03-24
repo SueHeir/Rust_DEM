@@ -1,7 +1,7 @@
 use nalgebra::Matrix3;
-use std::{fs::File, io::Write};
+use std::{collections::HashMap, fs::File, io::Write};
 
-use crate::sphere;
+use crate::sphere::{self, BondData};
 // Prints positions of particles to a vtp file in the vtp folder (no check is done for opening file, must include folder or no printing)
 pub fn print_vtp(p_data: &mut sphere::ParticleData, count: i32) {
     let filename = format!("./vtp/{}CYCLE.vtp", count);
@@ -75,7 +75,10 @@ pub fn print_vtp(p_data: &mut sphere::ParticleData, count: i32) {
 //     writeln!(&mut file,"{} {} {} {} {} {} {} {} {} {}",count,kinetic_tensor.index((0,0)),kinetic_tensor.index((1,0)), kinetic_tensor.index((1,1)),collision_tensor.index((0,0)),collision_tensor.index((1,0)), collision_tensor.index((1,1)),kinetic_tensor.index((0,0)).abs() + collision_tensor.index((0,0)).abs(),kinetic_tensor.index((1,0)).abs() + collision_tensor.index((1,0)).abs(), kinetic_tensor.index((1,1)).abs() + collision_tensor.index((1,1)).abs()).ok();
 //    }
 
-pub fn print_positions(p_data: &mut sphere::ParticleData) {
+pub fn print_positions(
+    p_data: &mut sphere::ParticleData,
+    bond_data: &mut HashMap<(usize, usize), sphere::BondData>,
+) {
     let mut file = match File::options()
         .read(true)
         .write(true)
@@ -93,6 +96,26 @@ pub fn print_positions(p_data: &mut sphere::ParticleData) {
             &mut file,
             "{} {} {}",
             p_data.position[i][0], p_data.position[i][1], p_data.position[i][2]
+        );
+    }
+
+    let mut file = match File::options()
+        .read(true)
+        .write(true)
+        .append(true)
+        .open("bond_data.txt")
+    {
+        Ok(file) => file,
+        Err(err) => {
+            println!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
+    for ((i, j), b_data) in bond_data.iter() {
+        writeln!(
+            &mut file,
+            "{} {} {} {} {} {}",
+            i, j, b_data.current_sigma, b_data.current_tau, b_data.sigma_max, b_data.tau_max
         );
     }
 }

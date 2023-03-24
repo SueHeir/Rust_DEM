@@ -93,13 +93,13 @@ fn cycle(
 
         grid::final_integrate(p_data, d_data, dt);
         if cycle_count % update_rate == 0 {
-            print::print_positions(p_data);
+            print::print_positions(p_data, bond_data);
             for i in 0..p_data.radius.len() {
                 // println!("Omega {:?}", p_data.omega[i]);
-                println!(
-                    "Position {:?} {:?} {:?}",
-                    p_data.position[i][0], p_data.position[i][1], p_data.position[i][2]
-                );
+                // println!(
+                //     "Position {:?} {:?} {:?}",
+                //     p_data.position[i][0], p_data.position[i][1], p_data.position[i][2]
+                // );
             }
         }
     }

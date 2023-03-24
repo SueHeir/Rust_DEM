@@ -16,7 +16,7 @@ position_2_x = []
 position_3_x = []
 
 
-filename = "target/release/three_sphere_data.txt"
+filename = "target/release/data.txt"
 
 file = open(filename, 'r')
 
@@ -49,6 +49,7 @@ position_3_x = np.array(position_3_x)
 
 
 delta_bot = (position_2_x - position_1_x - 0.05E-04) * 1000
+delta_bot_y = (position_2_y - position_1_y) * 100000
 delta_right_y = (position_3_y - position_1_y)
 delta_right_x = (position_3_x - position_1_x)
 delta_left_y = (position_2_y - position_3_y)
@@ -71,7 +72,8 @@ plt.plot(position_3_y)
 plt.plot(delta_left)
 plt.plot(delta_right)
 plt.plot(delta_bot)
-plt.legend(["p1 y_pos","p2 y_pos","p3 y_pos","left bond overlap x1000","right bond overlap  x1000","bot bond overlap  x1000"])
+plt.plot(delta_bot_y)
+plt.legend(["p1 y_pos","p2 y_pos","p3 y_pos","left bond overlap x1000","right bond overlap  x1000","bot bond overlap  x1000","bot y diff x100000"])
 plt.show()
 
 
