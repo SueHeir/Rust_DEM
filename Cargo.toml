@@ -1,5 +1,5 @@
 [package]
-name = "rust-hello"
+name = "dem_bonded_spheres"
 version = "0.1.0"
 edition = "2021"
 

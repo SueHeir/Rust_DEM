@@ -75,6 +75,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dem_bonded_spheres"
+version = "0.1.0"
+dependencies = [
+ "ex",
+ "nalgebra",
+ "rand",
+ "rayon",
+]
+
+[[package]]
 name = "either"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -309,16 +319,6 @@ dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
  "num_cpus",
-]
-
-[[package]]
-name = "rust-hello"
-version = "0.1.0"
-dependencies = [
- "ex",
- "nalgebra",
- "rand",
- "rayon",
 ]
 
 [[package]]
