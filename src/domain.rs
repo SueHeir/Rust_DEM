@@ -151,4 +151,5 @@ pub struct DomainData {
     pub(crate) collision_boxes: Vector3<i32>,
     pub(crate) lees_edwards_boundary: f64,
     pub(crate) g_data: Vec<Vec<Vec<Box>>>,
+    pub(crate) gravity: Vector3<f64>,
 }

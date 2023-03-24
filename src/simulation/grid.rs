@@ -75,6 +75,60 @@ pub fn simp_collisions(
     }
 }
 
+pub fn simp_wall(p_data: &mut sphere::ParticleData, _dt: f64) {
+    for i in 0..p_data.radius.len() {
+        let p1 = p_data.position[i];
+        let p2 = Vector3::new(p1[0], -p_data.radius[i], p1[2]);
+        let v1 = p_data.velocity[i];
+        let v2 = Vector3::zeros();
+        let r1 = p_data.radius[i];
+        let r2 = p_data.radius[i];
+
+        let delta_position = p2 - p1;
+
+        let distance = delta_position.norm();
+
+        if distance < r1 + r2 {
+            p_data.is_collision[i] = true;
+
+            let normalized_delta = delta_position / distance;
+
+            let distance_delta = (p_data.radius[i] + p_data.radius[i]) - distance;
+
+            let effective_radius = 1.0 / (1.0 / p_data.radius[i] + 1.0 / p_data.radius[i]);
+
+            let effective_youngs = 1.0
+                / ((1.0 - p_data.poisson_ratio[i] * p_data.poisson_ratio[i])
+                    / p_data.youngs_mod[i]
+                    + (1.0 - p_data.poisson_ratio[i] * p_data.poisson_ratio[i])
+                        / p_data.youngs_mod[i]);
+            let normal_force = 4.0 / 3.0
+                * effective_youngs
+                * effective_radius.sqrt()
+                * distance_delta.powf(3.0 / 2.0);
+
+            let contact_stiffness =
+                2.0 * effective_youngs * (effective_radius * distance_delta).sqrt();
+            let reduced_mass = p_data.mass[i] * p_data.mass[i] / (p_data.mass[i] + p_data.mass[i]);
+
+            let delta_veloctiy = v2 - v1;
+            let f_dot = normalized_delta.dot(&delta_veloctiy);
+            let v_r_n = f_dot * normalized_delta;
+
+            let dissipation_force = 2.0
+                * 0.91287092917
+                * p_data.beta
+                * (contact_stiffness * reduced_mass).sqrt()
+                * v_r_n.norm()
+                * v_r_n.dot(&normalized_delta).signum();
+
+            p_data.force[i] -= (normal_force - dissipation_force) * normalized_delta;
+
+            // println!("Collision")
+        }
+    }
+}
+
 pub fn simp_bonds(
     p_data: &mut sphere::ParticleData,
     bond_data: &mut HashMap<(usize, usize), sphere::BondData>,
@@ -278,9 +332,10 @@ pub fn simp_bonds(
     }
 }
 
-pub fn inital_integrate(p_data: &mut sphere::ParticleData, dt: f64) {
+pub fn inital_integrate(p_data: &mut sphere::ParticleData, d_data: &domain::DomainData, dt: f64) {
     for i in 0..p_data.radius.len() {
-        p_data.velocity[i] += 0.5 * dt * p_data.force[i] / p_data.mass[i];
+        p_data.velocity[i] +=
+            0.5 * dt * p_data.force[i] / p_data.mass[i] + 0.5 * dt * d_data.gravity;
         p_data.position[i] += p_data.velocity[i] * dt;
 
         p_data.angular_moment[i] += 0.5 * dt * p_data.torque[i];
@@ -306,9 +361,10 @@ pub fn inital_integrate(p_data: &mut sphere::ParticleData, dt: f64) {
     }
 }
 
-pub fn final_integrate(p_data: &mut sphere::ParticleData, dt: f64) {
+pub fn final_integrate(p_data: &mut sphere::ParticleData, d_data: &domain::DomainData, dt: f64) {
     for i in 0..p_data.radius.len() {
-        p_data.velocity[i] += 0.5 * dt * p_data.force[i] / p_data.mass[i];
+        p_data.velocity[i] +=
+            0.5 * dt * p_data.force[i] / p_data.mass[i] + 0.5 * dt * d_data.gravity;
 
         p_data.angular_moment[i] += 0.5 * dt * p_data.torque[i];
 

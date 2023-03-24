@@ -68,7 +68,7 @@ fn cycle(
         //Update velocity and position based on forces
         // grid::euler_integration(p_data, dt);
 
-        grid::inital_integrate(p_data, dt);
+        grid::inital_integrate(p_data, d_data, dt);
 
         //Boundary Conditions
         // grid::lees_edwards_boundaries(d_data, p_data, dt, ledisplace);
@@ -85,16 +85,21 @@ fn cycle(
         //Brute Force Collision Detection, this Updates the forces on each particle
         grid::simp_collisions(p_data, bond_data, dt);
         grid::simp_bonds(p_data, bond_data, dt);
+        grid::simp_wall(p_data, dt);
         bond_data.retain(|key, value| !value.broken);
 
         // grid::update(d_data, p_data);
         // grid::collisions(d_data, p_data, &mut f_data, dt, ledisplace);
 
-        grid::final_integrate(p_data, dt);
+        grid::final_integrate(p_data, d_data, dt);
         if cycle_count % update_rate == 0 {
+            print::print_positions(p_data);
             for i in 0..p_data.radius.len() {
                 // println!("Omega {:?}", p_data.omega[i]);
-                // println!("Position {:?}", p_data.position[i]);
+                println!(
+                    "Position {:?} {:?} {:?}",
+                    p_data.position[i][0], p_data.position[i][1], p_data.position[i][2]
+                );
             }
         }
     }
@@ -110,7 +115,7 @@ fn calculate_delta_time(p_data: &sphere::ParticleData) -> f64 {
         dt = delta.min(dt);
     }
 
-    println!("Useing {} for delta time", dt * 0.1);
+    println!("Useing {} for delta time", dt * 0.01);
     //Fractional Factor set to 0.5 here,
-    return dt * 0.1;
+    return dt * 0.01;
 }

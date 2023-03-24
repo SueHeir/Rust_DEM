@@ -74,3 +74,25 @@ pub fn print_vtp(p_data: &mut sphere::ParticleData, count: i32) {
 
 //     writeln!(&mut file,"{} {} {} {} {} {} {} {} {} {}",count,kinetic_tensor.index((0,0)),kinetic_tensor.index((1,0)), kinetic_tensor.index((1,1)),collision_tensor.index((0,0)),collision_tensor.index((1,0)), collision_tensor.index((1,1)),kinetic_tensor.index((0,0)).abs() + collision_tensor.index((0,0)).abs(),kinetic_tensor.index((1,0)).abs() + collision_tensor.index((1,0)).abs(), kinetic_tensor.index((1,1)).abs() + collision_tensor.index((1,1)).abs()).ok();
 //    }
+
+pub fn print_positions(p_data: &mut sphere::ParticleData) {
+    let mut file = match File::options()
+        .read(true)
+        .write(true)
+        .append(true)
+        .open("data.txt")
+    {
+        Ok(file) => file,
+        Err(err) => {
+            println!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
+    for i in 0..p_data.radius.len() {
+        writeln!(
+            &mut file,
+            "{} {} {}",
+            p_data.position[i][0], p_data.position[i][1], p_data.position[i][2]
+        );
+    }
+}
