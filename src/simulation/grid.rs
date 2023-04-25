@@ -1,42 +1,322 @@
-use core::prelude::v1;
-use std::collections::HashMap;
-use std::f64::consts::PI;
-
-use nalgebra::Quaternion;
-use nalgebra::UnitQuaternion;
-use nalgebra::Vector3;
+use nalgebra::Vector2;
 
 use crate::domain;
 use crate::sphere;
 
-pub fn simp_collisions(
+pub fn relax_boundaries_box(d_data: &mut domain::DomainData, p_data: &mut sphere::ParticleData) {
+    for i in 0..p_data.radius.len() {
+        if p_data.position[i][1] > d_data.domain[1] {
+            // p_data.position[i][1] = d_data.domain[1] - p_data.radius[i]
+            p_data.position[i][1] -= d_data.domain[1];
+        }
+        // if particle is less than domain move to end of domain
+        // Also apply velocity change to particle for shearing
+        else if p_data.position[i][1] <= 0.0 {
+            // p_data.position[i][1] = p_data.radius[i]
+            p_data.position[i][1] += d_data.domain[1];
+        }
+        // std::cout << distb << std::endl;//X boundary condition
+        // if particles is greater than domain move to beginning of domain
+        if p_data.position[i][0] > d_data.domain[0] {
+            // p_data.position[i][0] = d_data.domain[0] - p_data.radius[i]
+            p_data.position[i][0] -= d_data.domain[0];
+        }
+        // if particle is less than domain move to end of domain
+        else if p_data.position[i][0] <= 0.0 {
+            // p_data.position[i][0] = p_data.radius[i]
+            p_data.position[i][0] += d_data.domain[0];
+        }
+
+        // Z boundary condition
+        // if particles is greater than domain move to beginning of domain
+        if p_data.position[i][2] > d_data.domain[2] {
+            // p_data.position[i][2] = d_data.domain[2] - p_data.radius[i]
+            p_data.position[i][2] -= d_data.domain[2];
+        }
+        // if particle is less than domain move to end of domain
+        else if p_data.position[i][2] <= 0.0 {
+            // p_data.position[i][2] = p_data.radius[i]
+            p_data.position[i][2] += d_data.domain[2];
+        }
+    }
+}
+
+pub fn update(d_data: &mut domain::DomainData, p_data: &mut sphere::ParticleData) {
+    //Clears all boxes of particles in the box
+    for i in 0..d_data.g_data.len() {
+        for j in 0..d_data.g_data[i].len() {
+            for k in 0..d_data.g_data[i][j].len() {
+                d_data.g_data[i][j][k].real.clear();
+                d_data.g_data[i][j][k].ghost.clear();
+
+                for index in 0..p_data.radius.len() {
+                    if d_data.g_data[i][j][k].is_position_in_box(p_data.position[index]) {
+                        d_data.g_data[i][j][k].real.push(index.try_into().unwrap())
+                    } else if d_data.g_data[i][j][k].is_sphere_aabb_in_radius_enlarged_box(
+                        p_data.position[index],
+                        p_data.radius[index],
+                        p_data.max_radius,
+                    ) {
+                        d_data.g_data[i][j][k].ghost.push(index.try_into().unwrap())
+                    } else if ((i == 0 || i == d_data.g_data.len() - 1)
+                        || (j == 0 || j == d_data.g_data[i].len() - 1)
+                        || (k == 0 || k == d_data.g_data[i][j].len() - 1))
+                        && d_data.g_data[i][j][k].is_periodic_sphere(
+                            p_data.position[index],
+                            p_data.radius[index],
+                            p_data.max_radius,
+                            d_data,
+                        )
+                    {
+                        d_data.g_data[i][j][k].ghost.push(index.try_into().unwrap())
+                    }
+                }
+            }
+        }
+    }
+}
+pub fn relax(d_data: &mut domain::DomainData, p_data: &mut sphere::ParticleData, relax_rate: f64) {
+    for box_i in 0..d_data.collision_boxes[0] {
+        for box_j in 0..d_data.collision_boxes[1] {
+            for box_k in 0..d_data.collision_boxes[2] {
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in ii + 1
+                        ..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                            .real
+                            .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [jj] as usize;
+
+                        // println!("i {}, j {}", i,j);
+                        let delta_position = p_data.position[j] - p_data.position[i];
+
+                        let distance = delta_position.norm();
+
+                        //println!("Distance: {} Radius+radius: {}", distance, p_data.radius[i] + p_data.radius[j]);
+
+                        if distance < p_data.radius[i] + p_data.radius[j] {
+                            p_data.is_collision[i] = true;
+                            p_data.is_collision[j] = true;
+
+                            let normalized_delta = delta_position / distance;
+
+                            //println!("{:?}",normalized_delta);
+
+                            p_data.velocity[i] -= (relax_rate) * normalized_delta;
+                            p_data.velocity[j] += (relax_rate) * normalized_delta;
+                        }
+                    }
+                }
+
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                        .ghost
+                        .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].ghost
+                            [jj] as usize;
+
+                        // println!("i {}, j {}", i,j);
+                        let mut p1 = p_data.position[i];
+                        let mut p2 = p_data.position[j];
+
+                        let r1 = p_data.radius[i];
+                        let r2 = p_data.radius[j];
+
+                        if p1[1] - r1 + d_data.domain[1] <= p2[1] + r2 {
+                            p1[1] += d_data.domain[1];
+                        } else if p2[1] - r2 + d_data.domain[1] <= p1[1] + r1 {
+                            p2[1] += d_data.domain[1];
+                        }
+                        if p1[0] - r1 + d_data.domain[0] <= p2[0] + r2 {
+                            p1[0] += d_data.domain[0];
+                        } else if p2[0] - r2 + d_data.domain[0] <= p1[0] + r1 {
+                            p2[0] += d_data.domain[0];
+                        }
+
+                        if p1[2] - r1 + d_data.domain[2] <= p2[2] + r2 {
+                            p1[2] += d_data.domain[2];
+                        } else if p2[2] - r2 + d_data.domain[2] <= p1[2] + r1 {
+                            p2[2] += d_data.domain[2];
+                        }
+
+                        let delta_position = p2 - p1;
+                        // let delta_position = p_data.position[j] - p_data.position[i];
+
+                        let distance = delta_position.norm();
+
+                        //println!("Distance: {} Radius+radius: {}", distance, p_data.radius[i] + p_data.radius[j]);
+
+                        if distance < p_data.radius[i] + p_data.radius[j] {
+                            p_data.is_collision[i] = true;
+                            p_data.is_collision[j] = true;
+
+                            let normalized_delta = delta_position / distance;
+
+                            //println!("{:?}",normalized_delta);
+
+                            p_data.velocity[i] -= (relax_rate * 0.5) * normalized_delta;
+                            p_data.velocity[j] += (relax_rate * 0.5) * normalized_delta;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn is_relaxed(
+    d_data: &domain::DomainData,
+    p_data: &sphere::ParticleData,
+    radius_percentage: f64,
+) -> bool {
+    println!("is_Relaxed");
+    for box_i in 0..d_data.collision_boxes[0] {
+        for box_j in 0..d_data.collision_boxes[1] {
+            for box_k in 0..d_data.collision_boxes[2] {
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in ii + 1
+                        ..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                            .real
+                            .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [jj] as usize;
+                        let delta_position = p_data.position[j] - p_data.position[i];
+
+                        let distance = delta_position.norm();
+
+                        if distance < radius_percentage * (p_data.radius[i] + p_data.radius[j]) {
+                            return false;
+                        }
+                    }
+                }
+
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                        .ghost
+                        .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].ghost
+                            [jj] as usize;
+
+                        let mut p1 = p_data.position[i];
+                        let mut p2 = p_data.position[j];
+
+                        let r1 = p_data.radius[i];
+                        let r2 = p_data.radius[j];
+
+                        if p1[1] - r1 + d_data.domain[1] <= p2[1] + r2 {
+                            p1[1] += d_data.domain[1];
+                        } else if p2[1] - r2 + d_data.domain[1] <= p1[1] + r1 {
+                            p2[1] += d_data.domain[1];
+                        }
+                        if p1[0] - r1 + d_data.domain[0] <= p2[0] + r2 {
+                            p1[0] += d_data.domain[0];
+                        } else if p2[0] - r2 + d_data.domain[0] <= p1[0] + r1 {
+                            p2[0] += d_data.domain[0];
+                        }
+
+                        if p1[2] - r1 + d_data.domain[2] <= p2[2] + r2 {
+                            p1[2] += d_data.domain[2];
+                        } else if p2[2] - r2 + d_data.domain[2] <= p1[2] + r1 {
+                            p2[2] += d_data.domain[2];
+                        }
+
+                        let delta_position = p1 - p2;
+
+                        let distance = delta_position.norm();
+
+                        if distance < radius_percentage * (p_data.radius[i] + p_data.radius[j]) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+pub fn _simp_collisions(
+    d_data: &domain::DomainData,
     p_data: &mut sphere::ParticleData,
-    bond_data: &mut HashMap<(usize, usize), sphere::BondData>,
+    f_data: &mut sphere::ForceData,
     _dt: f64,
+    ledisplace: f64,
 ) {
     for i in 0..p_data.radius.len() {
         for j in i + 1..p_data.radius.len() {
-            if bond_data.contains_key(&(i, j)) {
-                return;
-            }
-            let p1 = p_data.position[i];
-            let p2 = p_data.position[j];
-            let v1 = p_data.velocity[i];
-            let v2 = p_data.velocity[j];
+            let mut p1 = p_data.position[i];
+            let mut p2 = p_data.position[j];
+            let mut v1 = p_data.velocity[i];
+            let mut v2 = p_data.velocity[j];
+
             let r1 = p_data.radius[i];
             let r2 = p_data.radius[j];
+            if p1[1] - r1 + d_data.domain[1] <= p2[1] + r2 {
+                p1[1] += d_data.domain[1];
+                v1[0] += d_data.lees_edwards_boundary * d_data.domain[1];
+                p1[0] += ledisplace;
+                if p1[0] > d_data.domain[0] {
+                    p1[0] -= d_data.domain[0];
+                }
+            } else if p2[1] - r2 + d_data.domain[1] <= p1[1] + r1 {
+                p2[1] += d_data.domain[1];
+                v2[0] += d_data.lees_edwards_boundary * d_data.domain[1];
+                p2[0] += ledisplace;
+                if p2[0] > d_data.domain[0] {
+                    p2[0] -= d_data.domain[0];
+                }
+            }
+            if p1[0] - r1 + d_data.domain[0] <= p2[0] + r2 {
+                p1[0] += d_data.domain[0];
+            } else if p2[0] - r2 + d_data.domain[0] <= p1[0] + r1 {
+                p2[0] += d_data.domain[0];
+            }
+
+            if p1[2] - r1 + d_data.domain[2] <= p2[2] + r2 {
+                p1[2] += d_data.domain[2];
+            } else if p2[2] - r2 + d_data.domain[2] <= p1[2] + r1 {
+                p2[2] += d_data.domain[2];
+            }
 
             let delta_position = p2 - p1;
 
             let distance = delta_position.norm();
 
-            if distance < r1 + r2 {
+            if distance < p_data.radius[i] + p_data.radius[j] {
                 p_data.is_collision[i] = true;
                 p_data.is_collision[j] = true;
 
                 let normalized_delta = delta_position / distance;
 
                 let distance_delta = (p_data.radius[i] + p_data.radius[j]) - distance;
+
+                // let eff = p_data.sphere_material_map.get(&s).unwrap();
+                // let effective_radius = eff.eff_radius;
+                // let effective_youngs = eff.eff_youngs_mod;
 
                 let effective_radius = 1.0 / (1.0 / p_data.radius[i] + 1.0 / p_data.radius[j]);
 
@@ -57,224 +337,234 @@ pub fn simp_collisions(
 
                 let delta_veloctiy = v2 - v1;
                 let f_dot = normalized_delta.dot(&delta_veloctiy);
-                let v_r_n = f_dot * normalized_delta;
+                let _v_r = f_dot * normalized_delta;
+
+                // std::cout << beta <<F_dot << " " << reduced_mass << " "<< contact_stiffness << "\n";
 
                 let dissipation_force = 2.0
-                    * 0.91287092917
+                    * 0.9128709292
                     * p_data.beta
                     * (contact_stiffness * reduced_mass).sqrt()
-                    * v_r_n.norm()
-                    * v_r_n.dot(&normalized_delta).signum();
+                    * f_dot;
+
+                // if(distance_delta > 0.00001)
+                // std::cout << dissipation_force << " " << normal_force << " "<< distance_delta <<"\n";
 
                 p_data.force[i] -= (normal_force - dissipation_force) * normalized_delta;
                 p_data.force[j] += (normal_force - dissipation_force) * normalized_delta;
 
-                // println!("Collision")
+                f_data
+                    .force
+                    .push((normal_force - dissipation_force) * normalized_delta);
+                f_data.particle_indexes.push(Vector2::new(i, j));
+                f_data.del.push(delta_position);
+
+                // if(distance_delta > 10e-7){
+                //     std::cout << distance_delta << " " << switched << "\n";
+                // }
+
+                // if(switched){
+                //     if(delta_veloctiy.norm() > 0.1){
+                //         std::cout << delta_veloctiy[0] << " " << delta_veloctiy[1] << " " << delta_veloctiy[2] << "\n";
+                //         std::cout << delta_veloctiy.norm() << "\n";
+                //         std::cout << error << "\n";
+
+                //     }
+
+                // }
             }
         }
     }
 }
 
-pub fn simp_bonds(
+pub fn collisions(
+    d_data: &domain::DomainData,
     p_data: &mut sphere::ParticleData,
-    bond_data: &mut HashMap<(usize, usize), sphere::BondData>,
+    f_data: &mut sphere::ForceData,
     _dt: f64,
+    ledisplace: f64,
 ) {
-    for ((i, j), b_data) in bond_data.iter_mut() {
-        let x_p1 = p_data.position[*i];
-        let x_p2 = p_data.position[*j];
+    for box_i in 0..d_data.collision_boxes[0] {
+        for box_j in 0..d_data.collision_boxes[1] {
+            for box_k in 0..d_data.collision_boxes[2] {
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in ii + 1
+                        ..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                            .real
+                            .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [jj] as usize;
 
-        let x_rel = x_p2 - x_p1;
+                        // println!("i {}, j {}", i,j);
+                        let delta_position = p_data.position[j] - p_data.position[i];
 
-        let vel1 = p_data.velocity[*i];
-        let vel2 = p_data.velocity[*j];
+                        let distance = delta_position.norm();
 
-        let wrot1 = p_data.omega[*i];
-        let wrot2 = p_data.omega[*j];
+                        if distance < p_data.radius[i] + p_data.radius[j] {
+                            p_data.is_collision[i] = true;
+                            p_data.is_collision[j] = true;
 
-        let w_rel = wrot2 - wrot1;
+                            let normalized_delta = delta_position / distance;
 
-        let nom = x_rel.magnitude();
+                            let distance_delta = (p_data.radius[i] + p_data.radius[j]) - distance;
 
-        let n12 = x_rel.normalize();
+                            // let eff = p_data.sphere_material_map.get(&s).unwrap();
+                            // let effective_radius = eff.eff_radius;
+                            // let effective_youngs = eff.eff_youngs_mod;
 
-        let r1_rel = 0.5 * nom * n12;
-        let r2_rel = -0.5 * nom * n12;
+                            let effective_radius =
+                                1.0 / (1.0 / p_data.radius[i] + 1.0 / p_data.radius[j]);
 
-        let v1_w = wrot1.cross(&r1_rel);
-        let v2_w = wrot2.cross(&r2_rel);
+                            let effective_youngs = 1.0
+                                / ((1.0 - p_data.poisson_ratio[i] * p_data.poisson_ratio[i])
+                                    / p_data.youngs_mod[i]
+                                    + (1.0 - p_data.poisson_ratio[j] * p_data.poisson_ratio[j])
+                                        / p_data.youngs_mod[j]);
 
-        let vc1 = vel1 + v1_w;
-        let vc2 = vel2 + v2_w;
+                            let contact_stiffness =
+                                2.0 * effective_youngs * (effective_radius * distance_delta).sqrt();
 
-        let vn12 = (vc2 - vc1).dot(&n12);
+                            let normal_force = 2.0 / 3.0 * distance_delta * contact_stiffness;
+                            let reduced_mass =
+                                p_data.mass[i] * p_data.mass[j] / (p_data.mass[i] + p_data.mass[j]);
 
-        let vn_rel = vn12 * n12;
-        let vt_rel = (vc2 - vc1) - vn_rel;
+                            let delta_veloctiy = p_data.velocity[j] - p_data.velocity[i];
+                            let f_dot = normalized_delta.dot(&delta_veloctiy);
+                            let v_r_n = f_dot * normalized_delta;
 
-        let wn12 = w_rel.dot(&n12);
+                            let dissipation_force = 2.0
+                                * 0.91287092917
+                                * p_data.beta
+                                * (contact_stiffness * reduced_mass).sqrt()
+                                * v_r_n.norm()
+                                * v_r_n.dot(&normalized_delta).signum();
 
-        let wn_rel = wn12 * n12;
+                            // println!("{} {} {}", distance_delta, normal_force, dissipation_force);
+                            p_data.force[i] -=
+                                (normal_force - dissipation_force) * normalized_delta;
+                            p_data.force[j] +=
+                                (normal_force - dissipation_force) * normalized_delta;
 
-        let wt_rel = w_rel - wn_rel;
+                            let force_length_matrix = ((normal_force - dissipation_force)
+                                * normalized_delta)
+                                * delta_position.transpose();
+                            f_data.forcedata.push(force_length_matrix);
+                        }
+                    }
+                }
 
-        let a_bnd = PI * p_data.radius[*i].powi(2);
-        let j_bnd = 0.5 * PI * p_data.radius[*i].powi(4);
+                for ii in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                    .real
+                    .len()
+                {
+                    for jj in 0..d_data.g_data[box_i as usize][box_j as usize][box_k as usize]
+                        .ghost
+                        .len()
+                    {
+                        let i = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].real
+                            [ii] as usize;
+                        let j = d_data.g_data[box_i as usize][box_j as usize][box_k as usize].ghost
+                            [jj] as usize;
+                        let mut p1 = p_data.position[i];
+                        let mut p2 = p_data.position[j];
+                        let mut v1 = p_data.velocity[i];
+                        let mut v2 = p_data.velocity[j];
 
-        // let estart = 1.0
-        //     / ((1.0 - p_data.poisson_ratio[*i] * p_data.poisson_ratio[*i]) / p_data.youngs_mod[*i]
-        //         + (1.0 - p_data.poisson_ratio[*j] * p_data.poisson_ratio[*j])
-        //             / p_data.youngs_mod[*j]);
-        // let rstar = 1.0 / (1.0 / p_data.radius[*i] + 1.0 / p_data.radius[*j]);
+                        let r1 = p_data.radius[i];
+                        let r2 = p_data.radius[j];
+                        if p1[1] - r1 + d_data.domain[1] <= p2[1] + r2 {
+                            p1[1] += d_data.domain[1];
+                            v1[0] += d_data.lees_edwards_boundary * d_data.domain[1];
+                            p1[0] += ledisplace;
+                            if p1[0] > d_data.domain[0] {
+                                p1[0] -= d_data.domain[0];
+                            }
+                        } else if p2[1] - r2 + d_data.domain[1] <= p1[1] + r1 {
+                            p2[1] += d_data.domain[1];
+                            v2[0] += d_data.lees_edwards_boundary * d_data.domain[1];
+                            p2[0] += ledisplace;
+                            if p2[0] > d_data.domain[0] {
+                                p2[0] -= d_data.domain[0];
+                            }
+                        }
+                        if p1[0] - r1 + d_data.domain[0] <= p2[0] + r2 {
+                            p1[0] += d_data.domain[0];
+                        } else if p2[0] - r2 + d_data.domain[0] <= p1[0] + r1 {
+                            p2[0] += d_data.domain[0];
+                        }
 
-        let lbond = p_data.radius[*i] + p_data.radius[*j];
+                        if p1[2] - r1 + d_data.domain[2] <= p2[2] + r2 {
+                            p1[2] += d_data.domain[2];
+                        } else if p2[2] - r2 + d_data.domain[2] <= p1[2] + r1 {
+                            p2[2] += d_data.domain[2];
+                        }
 
-        let ovlp = nom - lbond;
+                        let delta_position = p2 - p1;
 
-        let tem_ft = b_data.tangential_force_sum + b_data.incremental_tangential_force;
-        let tem_mn = b_data.normal_moment_sum + b_data.incremental_normal_moment;
-        let tem_mt = b_data.tangential_moment_sum + b_data.incremental_tangential_moment;
+                        let distance = delta_position.norm();
 
-        let len_ft = tem_ft.magnitude();
-        let len_mn = tem_mn.magnitude();
-        let len_mt = tem_mt.magnitude();
+                        if distance < p_data.radius[i] + p_data.radius[j] {
+                            p_data.is_collision[i] = true;
+                            p_data.is_collision[j] = true;
 
-        let norm_ft = tem_ft.dot(&n12);
-        let norm_mn = tem_mn.dot(&n12);
-        let norm_mt = tem_mt.dot(&n12);
+                            let normalized_delta = delta_position / distance;
 
-        let tem_ft1 = tem_ft - norm_ft * n12;
-        let tem_mn1 = norm_mn * n12;
-        let tem_mt1 = tem_mt - norm_mt * n12;
+                            let distance_delta = (p_data.radius[i] + p_data.radius[j]) - distance;
 
-        let len_ft1 = tem_ft1.magnitude();
-        let len_mn1 = tem_mn1.magnitude();
-        let len_mt1 = tem_mt1.magnitude();
+                            let effective_radius =
+                                1.0 / (1.0 / p_data.radius[i] + 1.0 / p_data.radius[j]);
 
-        if len_ft1 != 0.0 {
-            b_data.tangential_force_sum = len_ft / len_ft1 * tem_ft1;
-            b_data.incremental_tangential_force = Vector3::zeros();
-        }
+                            let effective_youngs = 1.0
+                                / ((1.0 - p_data.poisson_ratio[i] * p_data.poisson_ratio[i])
+                                    / p_data.youngs_mod[i]
+                                    + (1.0 - p_data.poisson_ratio[j] * p_data.poisson_ratio[j])
+                                        / p_data.youngs_mod[j]);
 
-        if len_mn1 != 0.0 {
-            b_data.normal_moment_sum = len_mn / len_mn1 * tem_mn1;
-            b_data.incremental_normal_moment = Vector3::zeros();
-        }
+                            let contact_stiffness =
+                                2.0 * effective_youngs * (effective_radius * distance_delta).sqrt();
 
-        if len_mt1 != 0.0 {
-            b_data.tangential_moment_sum = len_mt / len_mt1 * tem_mt1;
-            b_data.incremental_tangential_moment = Vector3::zeros();
-        }
+                            let normal_force = 2.0 / 3.0 * distance_delta * contact_stiffness;
+                            let reduced_mass =
+                                p_data.mass[i] * p_data.mass[j] / (p_data.mass[i] + p_data.mass[j]);
 
-        let fbnd_norm = b_data.n_stiff * a_bnd / lbond * ovlp;
+                            let delta_veloctiy = v2 - v1;
+                            let f_dot = normalized_delta.dot(&delta_veloctiy);
+                            let v_r_n = f_dot * normalized_delta;
 
-        let thres = p_data.radius[*i];
-        let mut thres3 = thres * 0.0001;
-        let thres1 = thres * (b_data.mt_stiff * j_bnd / lbond);
-        let thres2 = thres * (b_data.mn_stiff * (0.5 * j_bnd) / lbond);
-        thres3 = thres3 * b_data.t_stiff * a_bnd / lbond;
+                            let dissipation_force = 2.0
+                                * 0.9128709292
+                                * p_data.beta
+                                * (contact_stiffness * reduced_mass).sqrt()
+                                * v_r_n.norm()
+                                * v_r_n.dot(&normalized_delta).signum();
+                            // println!("{} {} {}", distance_delta, normal_force, dissipation_force);
+                            p_data.force[i] -=
+                                (normal_force - dissipation_force) * normalized_delta * 0.5;
+                            p_data.force[j] +=
+                                (normal_force - dissipation_force) * normalized_delta * 0.5;
 
-        b_data.normal_force_sum = fbnd_norm * n12;
-
-        b_data.incremental_tangential_force += b_data.t_stiff * a_bnd / lbond * vt_rel * _dt;
-        if b_data.incremental_tangential_force.magnitude() > thres3 {
-            b_data.tangential_force_sum += b_data.incremental_tangential_force;
-            b_data.incremental_tangential_force = Vector3::zeros();
-        }
-
-        b_data.incremental_normal_moment += b_data.mt_stiff * j_bnd / lbond * wn_rel * _dt;
-        if b_data.incremental_normal_moment.magnitude() > thres1 {
-            b_data.normal_moment_sum += b_data.incremental_normal_moment;
-            b_data.incremental_normal_moment = Vector3::zeros();
-        }
-
-        b_data.incremental_tangential_moment +=
-            b_data.mn_stiff * (0.5 * j_bnd) / lbond * wt_rel * _dt;
-        if b_data.incremental_tangential_moment.magnitude() > thres2 {
-            b_data.tangential_moment_sum += b_data.incremental_tangential_moment;
-            b_data.incremental_tangential_moment = Vector3::zeros();
-        }
-
-        let ftan = b_data.tangential_force_sum + b_data.incremental_tangential_force;
-        let mom_nor = b_data.normal_moment_sum + b_data.incremental_normal_moment;
-        let mom_tan = b_data.tangential_moment_sum + b_data.incremental_tangential_moment;
-
-        b_data.potential_energy_comp_ext =
-            lbond / (2.0 * b_data.n_stiff * a_bnd) * fbnd_norm.powi(2);
-
-        if b_data.t_stiff != 0.0 {
-            b_data.potential_energy_tang_deform =
-                lbond / (2.0 * b_data.t_stiff * a_bnd) * ftan.magnitude_squared();
-        } else {
-            b_data.potential_energy_tang_deform = 0.0;
-        }
-
-        if b_data.mt_stiff != 0.0 {
-            b_data.potential_energy_rot_deform =
-                lbond / (2.0 * b_data.mt_stiff * j_bnd) * mom_nor.magnitude_squared();
-        } else {
-            b_data.potential_energy_rot_deform = 0.0;
-        }
-
-        if b_data.mn_stiff != 0.0 {
-            b_data.pontential_energy_bend_deform =
-                lbond / (2.0 * b_data.mn_stiff * (0.5 * j_bnd)) * mom_tan.magnitude_squared();
-        } else {
-            b_data.pontential_energy_bend_deform = 0.0;
-        }
-
-        let mstar = 0.5 * p_data.mass[*i];
-        let moi_star = 0.5 * p_data.diagonal_inertia[*i][0];
-
-        let damp_n = 2.0 * b_data.e_n * (mstar * b_data.n_stiff * a_bnd / lbond).sqrt();
-        let damp_t = 2.0 * b_data.e_t * (mstar * b_data.t_stiff * a_bnd / lbond).sqrt();
-        let damp_tor = 2.0 * b_data.e_tor * (moi_star * b_data.mt_stiff * j_bnd / lbond).sqrt();
-        let damp_bend =
-            2.0 * b_data.e_bend * (moi_star * b_data.mn_stiff * (0.5 * j_bnd) / lbond).sqrt();
-
-        let fdamp_n = damp_n * vn_rel;
-        let fdamp_t = damp_t * vt_rel;
-        let mdamp_n = damp_tor * wn_rel;
-        let mdamp_t = damp_bend * wt_rel;
-
-        let fn_bnd = fbnd_norm;
-
-        let ft_bnd = ftan.magnitude();
-        let mn_bnd = mom_nor.magnitude();
-        let mt_bnd = mom_tan.magnitude();
-
-        b_data.current_sigma = fn_bnd / a_bnd + (2.0 * mt_bnd.abs() * p_data.radius[*i]) / j_bnd;
-        b_data.current_tau = ft_bnd.abs() / a_bnd + mn_bnd.abs() * p_data.radius[*i] / j_bnd;
-
-        if b_data.current_sigma > b_data.sigma_max || b_data.current_tau > b_data.tau_max {
-            b_data.broken = true;
-            println!("Broken Bond");
-            if b_data.current_sigma > b_data.sigma_max {
-                println!("because sigma")
-            }
-            if b_data.current_tau > b_data.tau_max {
-                println!("because tau")
-            }
-            if ovlp < 0.0 {
-                p_data.force[*i] += fbnd_norm * n12;
-                p_data.force[*j] -= fbnd_norm * n12;
+                            let force_length_matrix =
+                                ((normal_force - dissipation_force) * normalized_delta * 0.5)
+                                    * delta_position.transpose();
+                            f_data.forcedata.push(force_length_matrix);
+                        }
+                    }
+                }
             }
         }
+    }
+}
 
-        let ftot_tan = ftan + fdamp_t;
-
-        let torq1 = r1_rel.cross(&ftot_tan);
-        let torq2 = r2_rel.cross(&-ftot_tan);
-
-        p_data.force[*i] += b_data.normal_force_sum + ftan + fdamp_n + fdamp_t;
-        p_data.force[*j] -= b_data.normal_force_sum + ftan + fdamp_n + fdamp_t;
-
-        // println!("{:?}", b_data.normal_force_sum + ftan + fdamp_n + fdamp_t);
-
-        p_data.torque[*i] += mom_nor + mom_tan + torq1 + mdamp_n + mdamp_t;
-        p_data.torque[*j] += -mom_nor - mom_tan + torq2 - mdamp_n - mdamp_t;
-
-        // println!("{:?}", mom_nor + mom_tan + torq1 + mdamp_n + mdamp_t);
+pub fn _euler_integration(p_data: &mut sphere::ParticleData, dt: f64) {
+    for i in 0..p_data.radius.len() {
+        p_data.velocity[i] += dt * p_data.force[i] / p_data.mass[i];
+        p_data.position[i] += p_data.velocity[i] * dt;
     }
 }
 
@@ -282,184 +572,61 @@ pub fn inital_integrate(p_data: &mut sphere::ParticleData, dt: f64) {
     for i in 0..p_data.radius.len() {
         p_data.velocity[i] += 0.5 * dt * p_data.force[i] / p_data.mass[i];
         p_data.position[i] += p_data.velocity[i] * dt;
-
-        p_data.angular_moment[i] += 0.5 * dt * p_data.torque[i];
-
-        p_data.omega[i] = angmom_to_omega(
-            p_data.angular_moment[i],
-            p_data.ex_space[i],
-            p_data.ey_space[i],
-            p_data.ez_space[i],
-            p_data.diagonal_inertia[i],
-            p_data.omega[i],
-        );
-
-        (p_data.quaternion[i], p_data.omega[i]) = richardson(
-            p_data.quaternion[i],
-            p_data.angular_moment[i],
-            p_data.omega[i],
-            p_data.diagonal_inertia[i],
-            0.5 * dt,
-        );
-
-        p_data.update_space_exyz_with_q(i);
     }
 }
 
 pub fn final_integrate(p_data: &mut sphere::ParticleData, dt: f64) {
     for i in 0..p_data.radius.len() {
         p_data.velocity[i] += 0.5 * dt * p_data.force[i] / p_data.mass[i];
-
-        p_data.angular_moment[i] += 0.5 * dt * p_data.torque[i];
-
-        p_data.omega[i] = angmom_to_omega(
-            p_data.angular_moment[i],
-            p_data.ex_space[i],
-            p_data.ey_space[i],
-            p_data.ez_space[i],
-            p_data.diagonal_inertia[i],
-            p_data.omega[i],
-        );
     }
 }
 
-pub fn angmom_to_omega(
-    m: Vector3<f64>,
-    ex: Vector3<f64>,
-    ey: Vector3<f64>,
-    ez: Vector3<f64>,
-    idiag: Vector3<f64>,
-    mut w: Vector3<f64>,
-) -> Vector3<f64> {
-    let mut wbody: Vector3<f64> = Vector3::new(0.0, 0.0, 0.0);
+pub fn lees_edwards_boundaries(
+    d_data: &domain::DomainData,
+    p_data: &mut sphere::ParticleData,
+    _dt: f64,
+    ledisplace: f64,
+) {
+    for i in 0..p_data.radius.len() {
+        // Y boundary condition
+        // if particles is greater than domain move to beginning of domain
+        // Also apply velocity change to particle for shearing
+        if p_data.position[i][1] > d_data.domain[1] {
+            p_data.position[i][1] -= d_data.domain[1];
+            p_data.velocity[i][0] -= d_data.lees_edwards_boundary * d_data.domain[1];
+            p_data.position[i][0] -= ledisplace;
+            if p_data.position[i][0] <= 0.0 {
+                p_data.position[i][0] += d_data.domain[0];
+            }
+        }
+        // if particle is less than domain move to end of domain
+        // Also apply velocity change to particle for shearing
+        else if p_data.position[i][1] <= 0.0 {
+            p_data.position[i][1] += d_data.domain[1];
+            p_data.velocity[i][0] += d_data.lees_edwards_boundary * d_data.domain[1];
+            p_data.position[i][0] += ledisplace;
+            if p_data.position[i][0] > d_data.domain[0] {
+                p_data.position[i][0] -= d_data.domain[0];
+            }
+        }
+        // std::cout << distb << std::endl;//X boundary condition
+        // if particles is greater than domain move to beginning of domain
+        if p_data.position[i][0] > d_data.domain[0] {
+            p_data.position[i][0] -= d_data.domain[0];
+        }
+        // if particle is less than domain move to end of domain
+        else if p_data.position[i][0] <= 0.0 {
+            p_data.position[i][0] += d_data.domain[0];
+        }
 
-    if idiag[0] != 0.0 {
-        wbody[0] = (m[0] * ex[0] + m[1] * ex[1] + m[2] * ex[2]) / idiag[0];
-        // println!("idiag{}", idiag[0]);
+        // Z boundary condition
+        // if particles is greater than domain move to beginning of domain
+        if p_data.position[i][2] > d_data.domain[2] {
+            p_data.position[i][2] -= d_data.domain[2];
+        }
+        // if particle is less than domain move to end of domain
+        else if p_data.position[i][2] <= 0.0 {
+            p_data.position[i][2] += d_data.domain[2];
+        }
     }
-    if idiag[1] != 0.0 {
-        wbody[1] = (m[0] * ey[0] + m[1] * ey[1] + m[2] * ey[2]) / idiag[1];
-        // println!("idiag{}", idiag[1]);
-    }
-    if idiag[2] != 0.0 {
-        wbody[2] = (m[0] * ez[0] + m[1] * ez[1] + m[2] * ez[2]) / idiag[2];
-        // println!("idiag{}", idiag[2]);
-    }
-
-    w[0] = wbody[0] * ex[0] + wbody[1] * ey[0] + wbody[2] * ez[0];
-    w[1] = wbody[0] * ex[1] + wbody[1] * ey[1] + wbody[2] * ez[1];
-    w[2] = wbody[0] * ex[2] + wbody[1] * ey[2] + wbody[2] * ez[2];
-
-    return w;
-}
-
-fn mq_to_omega(m: Vector3<f64>, q: UnitQuaternion<f64>, moments: Vector3<f64>) -> Vector3<f64> {
-    let rot = q.to_rotation_matrix();
-
-    let mut wbody = rot.transpose() * m;
-
-    if moments[0] == 0.0 {
-        wbody[0] = 0.0;
-    } else {
-        wbody[0] /= moments[0];
-    }
-    if moments[1] == 0.0 {
-        wbody[1] = 0.0;
-    } else {
-        wbody[1] /= moments[1];
-    }
-    if moments[2] == 0.0 {
-        wbody[2] = 0.0;
-    } else {
-        wbody[2] /= moments[2];
-    }
-    let w = rot * wbody;
-
-    return w;
-}
-
-fn richardson(
-    q: UnitQuaternion<f64>,
-    m: Vector3<f64>,
-    mut w: Vector3<f64>,
-    moments: Vector3<f64>,
-    dtq: f64,
-) -> (UnitQuaternion<f64>, Vector3<f64>) {
-    // full update from dq/dt = 1/2 w q
-
-    //     // full update from dq/dt = 1/2 w q
-
-    //   double wq[4];
-    //   MathExtra::vecquat(w,q,wq);
-
-    let mut wq: Quaternion<f64> = Quaternion::new(
-        -w[0] * q[0] - w[1] * q[1] - w[2] * q[2],
-        q[3] * w[0] + w[1] * q[2] - w[2] * q[1],
-        q[3] * w[1] + w[2] * q[0] - w[0] * q[2],
-        q[3] * w[2] + w[0] * q[1] - w[1] * q[0],
-    );
-    //   double qfull[4];
-    //   qfull[0] = q[0] + dtq * wq[0];
-    //   qfull[1] = q[1] + dtq * wq[1];
-    //   qfull[2] = q[2] + dtq * wq[2];
-    //   qfull[3] = q[3] + dtq * wq[3];
-    //   MathExtra::qnormalize(qfull);
-
-    let qfull_vec = q.as_vector() + dtq * wq.as_vector();
-    let qfull_non_unit = Quaternion::new(qfull_vec[3], qfull_vec[0], qfull_vec[1], qfull_vec[2]);
-    let qfull = UnitQuaternion::from_quaternion(qfull_non_unit);
-
-    //   // 1st half update from dq/dt = 1/2 w q
-
-    //   double qhalf[4];
-    //   qhalf[0] = q[0] + 0.5*dtq * wq[0];
-    //   qhalf[1] = q[1] + 0.5*dtq * wq[1];
-    //   qhalf[2] = q[2] + 0.5*dtq * wq[2];
-    //   qhalf[3] = q[3] + 0.5*dtq * wq[3];
-    //   MathExtra::qnormalize(qhalf);
-
-    let qhalf_vec = q.as_vector() + 0.5 * dtq * wq.as_vector();
-    let qhalf_non_unit = Quaternion::new(qhalf_vec[3], qhalf_vec[0], qhalf_vec[1], qhalf_vec[2]);
-    let mut qhalf = UnitQuaternion::from_quaternion(qhalf_non_unit);
-
-    //   // re-compute omega at 1/2 step from m at 1/2 step and q at 1/2 step
-    //   // recompute wq
-
-    //   MathExtra::mq_to_omega(m,qhalf,moments,w);
-    //   MathExtra::vecquat(w,qhalf,wq);
-
-    w = mq_to_omega(m, qhalf, moments);
-
-    wq = Quaternion::new(
-        -w[0] * qhalf[0] - w[1] * qhalf[1] - w[2] * qhalf[2],
-        qhalf[3] * w[0] + w[1] * qhalf[2] - w[2] * qhalf[1],
-        qhalf[3] * w[1] + w[2] * qhalf[0] - w[0] * qhalf[2],
-        qhalf[3] * w[2] + w[0] * qhalf[1] - w[1] * qhalf[0],
-    );
-
-    //   // 2nd half update from dq/dt = 1/2 w q
-
-    // qhalf[0] += 0.5 * dtq * wq[0];
-    // qhalf[1] += 0.5 * dtq * wq[1];
-    // qhalf[2] += 0.5 * dtq * wq[2];
-    // qhalf[3] += 0.5 * dtq * wq[3];
-    // MathExtra::qnormalize(qhalf);
-
-    let temp = qhalf.as_vector() + 0.5 * dtq * wq.as_vector();
-    let temp_non_unit = Quaternion::new(temp[3], temp[0], temp[1], temp[2]);
-    qhalf = UnitQuaternion::from_quaternion(temp_non_unit);
-
-    // // corrected Richardson update
-
-    // q[0] = 2.0 * qhalf[0] - qfull[0];
-    // q[1] = 2.0 * qhalf[1] - qfull[1];
-    // q[2] = 2.0 * qhalf[2] - qfull[2];
-    // q[3] = 2.0 * qhalf[3] - qfull[3];
-    // MathExtra::qnormalize(q);
-    let q_temp = 2.0 * qhalf.as_vector() - qfull.as_vector();
-    let q_temp_non_unit = Quaternion::new(q_temp[3], q_temp[0], q_temp[1], q_temp[2]);
-    let finstuff = UnitQuaternion::from_quaternion(q_temp_non_unit);
-
-    // println!("{:?}", finstuff);
-    return (finstuff, w);
 }

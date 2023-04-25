@@ -1,2 +1,0 @@
-cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/elizabethsuehr/rust-hello/target/release/build/typenum-075623d3092eb519/out/consts.rs
-cargo:rustc-env=TYPENUM_BUILD_OP=/Users/elizabethsuehr/rust-hello/target/release/build/typenum-075623d3092eb519/out/op.rs

@@ -1,5 +1,5 @@
 mod simulation;
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::Vector3;
 
 use ex::fs::File;
 use rand::prelude::*;
@@ -61,17 +61,9 @@ fn main() {
         materials: Vec::<sphere::Material>::new(),
         sphere_material: Vec::<usize>::new(),
         sphere_material_map: HashMap::new(),
-        quaternion: Vec::<UnitQuaternion<f64>>::new(),
-        omega: Vec::<Vector3<f64>>::new(),
-        torque: Vec::<Vector3<f64>>::new(),
-        angular_moment: Vec::<Vector3<f64>>::new(),
-        ex_space: Vec::<Vector3<f64>>::new(),
-        ey_space: Vec::<Vector3<f64>>::new(),
-        ez_space: Vec::<Vector3<f64>>::new(),
-        diagonal_inertia: Vec::<Vector3<f64>>::new(),
         restitution_coefficient: 0.95,
         beta: 0.0,
-        friction: 0.0,
+        friction: 0.1,
         volume_fraction: 0.0,
     };
     let mut d_data = domain::DomainData {
@@ -79,9 +71,8 @@ fn main() {
         domain_volume: 1.0,
         collision_boxes: Vector3::new(1, 1, 1),
         g_data: Vec::new(),
-        lees_edwards_boundary: 0.0,
+        lees_edwards_boundary: 1.0,
     };
-    let mut bond_data = HashMap::<(usize, usize), sphere::BondData>::new();
 
     let mut argument = 0;
     for line in lines {
@@ -158,10 +149,10 @@ fn main() {
 
                 p_data.beta = beta;
             }
-            // "LEB" => {
-            //     println!("{}", line);
-            //     d_data.lees_edwards_boundary = results[1].parse::<f64>().unwrap();
-            // }
+            "LEB" => {
+                println!("{}", line);
+                d_data.lees_edwards_boundary = results[1].parse::<f64>().unwrap();
+            }
             "MAT" => {
                 println!("{}", line);
 
@@ -186,56 +177,56 @@ fn main() {
 
                 p_data.max_radius = max_radius;
             }
-            // "RGP" => {
-            //     println!("{}", line);
+            "RGP" => {
+                println!("{}", line);
 
-            //     let mut rng = rand::thread_rng();
+                let mut rng = rand::thread_rng();
 
-            //     let num_particles: i32 = results[1].parse::<i32>().unwrap();
+                let num_particles: i32 = results[1].parse::<i32>().unwrap();
 
-            //     for (_i, material) in p_data.materials.iter().enumerate() {
-            //         if material.id == results[2].parse::<i32>().unwrap() {
-            //             println!("Generating particles with Material: {:?}", material);
-            //             for _j in 0..num_particles {
-            //                 p_data.sphere_material.push(material.id as usize);
+                for (_i, material) in p_data.materials.iter().enumerate() {
+                    if material.id == results[2].parse::<i32>().unwrap() {
+                        println!("Generating particles with Material: {:?}", material);
+                        for _j in 0..num_particles {
+                            p_data.sphere_material.push(material.id as usize);
 
-            //                 p_data.radius.push(material.radius);
+                            p_data.radius.push(material.radius);
 
-            //                 p_data.mass.push(material.mass);
-            //                 p_data.density.push(material.density);
-            //                 p_data.youngs_mod.push(material.youngs_mod);
-            //                 p_data.poisson_ratio.push(material.poisson_ratio);
+                            p_data.mass.push(material.mass);
+                            p_data.density.push(material.density);
+                            p_data.youngs_mod.push(material.youngs_mod);
+                            p_data.poisson_ratio.push(material.poisson_ratio);
 
-            //                 let x: f64 = rng.gen::<f64>();
-            //                 let y: f64 = rng.gen::<f64>();
-            //                 let z: f64 = rng.gen::<f64>();
+                            let x: f64 = rng.gen::<f64>();
+                            let y: f64 = rng.gen::<f64>();
+                            let z: f64 = rng.gen::<f64>();
 
-            //                 let vx: f64 = rng.gen::<f64>();
-            //                 let vy: f64 = rng.gen::<f64>();
-            //                 let vz: f64 = rng.gen::<f64>();
+                            let vx: f64 = rng.gen::<f64>();
+                            let vy: f64 = rng.gen::<f64>();
+                            let vz: f64 = rng.gen::<f64>();
 
-            //                 p_data.position.push(Vector3::new(
-            //                     d_data.domain.x * x,
-            //                     d_data.domain.y * y,
-            //                     d_data.domain.z * z,
-            //                 ));
-            //                 p_data.velocity.push(Vector3::new(
-            //                     vx * 0.1 - 0.05,
-            //                     vy * 0.1 - 0.05,
-            //                     vz * 0.1 - 0.05,
-            //                 ));
-            //                 p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
+                            p_data.position.push(Vector3::new(
+                                d_data.domain.x * x,
+                                d_data.domain.y * y,
+                                d_data.domain.z * z,
+                            ));
+                            p_data.velocity.push(Vector3::new(
+                                vx * 0.1 - 0.05,
+                                vy * 0.1 - 0.05,
+                                vz * 0.1 - 0.05,
+                            ));
+                            p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
 
-            //                 p_data.is_collision.push(false);
-            //             }
-            //         }
-            //     }
+                            p_data.is_collision.push(false);
+                        }
+                    }
+                }
 
-            //     println!(
-            //         "Generating {} randomonly located spheres",
-            //         p_data.radius.len()
-            //     );
-            // }
+                println!(
+                    "Generating {} randomonly located spheres",
+                    p_data.radius.len()
+                );
+            }
             "FOR" => {
                 println!("{}", line);
 
@@ -243,86 +234,6 @@ fn main() {
                     if material.id == results[1].parse::<i32>().unwrap() {
                         println!("Generating two particle for force check");
 
-                        // First Particle Insertion
-                        p_data.sphere_material.push(material.id as usize);
-
-                        p_data.radius.push(material.radius);
-
-                        p_data.mass.push(material.mass);
-                        p_data.density.push(material.density);
-                        p_data.youngs_mod.push(material.youngs_mod);
-                        p_data.poisson_ratio.push(material.poisson_ratio);
-
-                        p_data
-                            .position
-                            .push(Vector3::new(0.475E-04, 0.5E-04, 0.5E-04));
-                        p_data.velocity.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
-
-                        p_data
-                            .quaternion
-                            .push(UnitQuaternion::from_basis_unchecked(&[
-                                Vector3::new(1.0, 0.0, 0.0),
-                                Vector3::new(0.0, 1.0, 0.0),
-                                Vector3::new(0.0, 0.0, 1.0),
-                            ]));
-                        // p_data.quaternion.push(p_data.exyz_to_q(
-                        //     Vector3::new(1.0, 0.0, 0.0),
-                        //     Vector3::new(0.0, 1.0, 0.0),
-                        //     Vector3::new(0.0, 0.0, 1.0),
-                        // ));
-                        p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.angular_moment.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.ex_space.push(Vector3::new(1.0, 0.0, 0.0));
-                        p_data.ey_space.push(Vector3::new(0.0, 1.0, 0.0));
-                        p_data.ez_space.push(Vector3::new(0.0, 0.0, 1.0));
-                        p_data.diagonal_inertia.push(Vector3::new(
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                        ));
-
-                        p_data.is_collision.push(false);
-
-                        //Second particle Insertion
-                        p_data.sphere_material.push(material.id as usize);
-
-                        p_data.radius.push(material.radius);
-
-                        p_data.mass.push(material.mass);
-                        p_data.density.push(material.density);
-                        p_data.youngs_mod.push(material.youngs_mod);
-                        p_data.poisson_ratio.push(material.poisson_ratio);
-
-                        p_data
-                            .position
-                            .push(Vector3::new(0.525E-04, 0.5E-04, 0.5E-04));
-                        p_data.velocity.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
-
-                        p_data
-                            .quaternion
-                            .push(UnitQuaternion::from_basis_unchecked(&[
-                                Vector3::new(1.0, 0.0, 0.0),
-                                Vector3::new(0.0, 1.0, 0.0),
-                                Vector3::new(0.0, 0.0, 1.0),
-                            ]));
-                        p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.angular_moment.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.ex_space.push(Vector3::new(1.0, 0.0, 0.0));
-                        p_data.ey_space.push(Vector3::new(0.0, 1.0, 0.0));
-                        p_data.ez_space.push(Vector3::new(0.0, 0.0, 1.0));
-                        p_data.diagonal_inertia.push(Vector3::new(
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                        ));
-
-                        p_data.is_collision.push(false);
-
-                        //Third particle Insertion
                         p_data.sphere_material.push(material.id as usize);
 
                         p_data.radius.push(material.radius);
@@ -333,134 +244,40 @@ fn main() {
                         p_data.poisson_ratio.push(material.poisson_ratio);
 
                         p_data.position.push(Vector3::new(
-                            0.5E-04,
-                            5.43301270189222e-05,
-                            0.500000000000E-04,
+                            d_data.domain.x * 0.4,
+                            d_data.domain.y * 0.5,
+                            d_data.domain.z * 0.5,
                         ));
-                        p_data.velocity.push(Vector3::new(0.0, 0.0, 0.0));
+                        p_data.velocity.push(Vector3::new(1.0, 0.0, 0.0));
                         p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
 
-                        p_data
-                            .quaternion
-                            .push(UnitQuaternion::from_basis_unchecked(&[
-                                Vector3::new(1.0, 0.0, 0.0),
-                                Vector3::new(0.0, 1.0, 0.0),
-                                Vector3::new(0.0, 0.0, 1.0),
-                            ]));
-                        p_data.omega.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.torque.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.angular_moment.push(Vector3::new(0.0, 0.0, 0.0));
-                        p_data.ex_space.push(Vector3::new(1.0, 0.0, 0.0));
-                        p_data.ey_space.push(Vector3::new(0.0, 1.0, 0.0));
-                        p_data.ez_space.push(Vector3::new(0.0, 0.0, 1.0));
-                        p_data.diagonal_inertia.push(Vector3::new(
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
-                            2.0 / 5.0 * material.mass * material.radius.powi(2),
+                        p_data.is_collision.push(false);
+
+                        p_data.sphere_material.push(material.id as usize);
+
+                        p_data.radius.push(material.radius);
+
+                        p_data.mass.push(material.mass);
+                        p_data.density.push(material.density);
+                        p_data.youngs_mod.push(material.youngs_mod);
+                        p_data.poisson_ratio.push(material.poisson_ratio);
+
+                        p_data.position.push(Vector3::new(
+                            d_data.domain.x * 0.6,
+                            d_data.domain.y * 0.5,
+                            d_data.domain.z * 0.5,
                         ));
+                        p_data.velocity.push(Vector3::new(-1.0, 0.0, 0.0));
+                        p_data.force.push(Vector3::new(0.0, 0.0, 0.0));
 
                         p_data.is_collision.push(false);
                     }
                 }
-                // bond 4.3e10 1.6e10 4.3e10 1.6e10 1 2.2e8 2.2e8 on //bdp 0.8763 0.8763 0.8763 0.8763
-                // Comment this out and it is stable
-                bond_data.insert(
-                    (0, 1),
-                    sphere::BondData {
-                        n_stiff: 4.3e10,
-                        t_stiff: 1.6e10,
-                        mn_stiff: 4.3e10,
-                        mt_stiff: 1.6e10,
-                        sigma_max: 2.2e8,
-                        tau_max: 2.2e8,
-                        e_n: 0.8763,
-                        e_t: 0.8763,
-                        e_tor: 0.8763,
-                        e_bend: 0.8763,
-                        normal_force_sum: Vector3::zeros(),
-                        tangential_force_sum: Vector3::zeros(),
-                        normal_moment_sum: Vector3::zeros(),
-                        tangential_moment_sum: Vector3::zeros(),
-                        incremental_normal_moment: Vector3::zeros(),
-                        incremental_tangential_moment: Vector3::zeros(),
-                        potential_energy_comp_ext: 0.0,
-                        potential_energy_tang_deform: 0.0,
-                        potential_energy_rot_deform: 0.0,
-                        pontential_energy_bend_deform: 0.0,
-                        incremental_tangential_force: Vector3::zeros(),
-                        resistance_normal_force: 0.0,
-                        current_sigma: 0.0,
-                        current_tau: 0.0,
-                        broken: false,
-                    },
-                );
-
-                bond_data.insert(
-                    (1, 2),
-                    sphere::BondData {
-                        n_stiff: 4.3e10,
-                        t_stiff: 1.6e10,
-                        mn_stiff: 4.3e10,
-                        mt_stiff: 1.6e10,
-                        sigma_max: 2.2e8,
-                        tau_max: 2.2e8,
-                        e_n: 0.8763,
-                        e_t: 0.8763,
-                        e_tor: 0.8763,
-                        e_bend: 0.8763,
-                        normal_force_sum: Vector3::zeros(),
-                        tangential_force_sum: Vector3::zeros(),
-                        normal_moment_sum: Vector3::zeros(),
-                        tangential_moment_sum: Vector3::zeros(),
-                        incremental_normal_moment: Vector3::zeros(),
-                        incremental_tangential_moment: Vector3::zeros(),
-                        potential_energy_comp_ext: 0.0,
-                        potential_energy_tang_deform: 0.0,
-                        potential_energy_rot_deform: 0.0,
-                        pontential_energy_bend_deform: 0.0,
-                        incremental_tangential_force: Vector3::zeros(),
-                        resistance_normal_force: 0.0,
-                        current_sigma: 0.0,
-                        current_tau: 0.0,
-                        broken: false,
-                    },
-                );
-
-                bond_data.insert(
-                    (0, 2),
-                    sphere::BondData {
-                        n_stiff: 4.3e10,
-                        t_stiff: 1.6e10,
-                        mn_stiff: 4.3e10,
-                        mt_stiff: 1.6e10,
-                        sigma_max: 2.2e8,
-                        tau_max: 2.2e8,
-                        e_n: 0.8763,
-                        e_t: 0.8763,
-                        e_tor: 0.8763,
-                        e_bend: 0.8763,
-                        normal_force_sum: Vector3::zeros(),
-                        tangential_force_sum: Vector3::zeros(),
-                        normal_moment_sum: Vector3::zeros(),
-                        tangential_moment_sum: Vector3::zeros(),
-                        incremental_normal_moment: Vector3::zeros(),
-                        incremental_tangential_moment: Vector3::zeros(),
-                        potential_energy_comp_ext: 0.0,
-                        potential_energy_tang_deform: 0.0,
-                        potential_energy_rot_deform: 0.0,
-                        pontential_energy_bend_deform: 0.0,
-                        incremental_tangential_force: Vector3::zeros(),
-                        resistance_normal_force: 0.0,
-                        current_sigma: 0.0,
-                        current_tau: 0.0,
-                        broken: false,
-                    },
-                );
             }
-            // "REL" => {
-            //     println!("{}", line);
-            //     command_stack.push(line);
-            // }
+            "REL" => {
+                println!("{}", line);
+                command_stack.push(line);
+            }
             "CYC" => {
                 println!("{}", line);
                 command_stack.push(line);
@@ -471,5 +288,5 @@ fn main() {
         argument += 1;
     }
 
-    simulation::handle_commands(command_stack, d_data, p_data, bond_data);
+    simulation::handle_commands(command_stack, d_data, p_data);
 }
