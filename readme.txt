@@ -1,4 +1,6 @@
-DEM Code in Rust
+# DEM Code in Rust
+
+A discrete element method code written in Rust. This code only runs Shear cells with a Lees-Edwards boundary condition. Results are matching granular kinetic theory. 
 
 Hertz contact model for single spheres, no friction
 
